@@ -27,6 +27,8 @@ class Application:
         self.running = True
         self.current_character_index = 2 # Default to Sherri
         self.character_list = list(CHARACTERS.keys())
+        self.next_expression: Optional[int] = None
+        self.next_background: Optional[int] = None
         self.expression: Optional[int] = None
         self.background: Optional[int] = None
         self.last_image_index = -1
@@ -46,6 +48,7 @@ class Application:
         
         # Initialize
         self.show_current_character()
+        self._roll_next_randoms()
         # We run generation in a separate thread to not block startup, 
         # but original code did it synchronously. We'll do it in background.
         threading.Thread(target=self.generate_and_save_images, args=(self.get_current_character(),)).start()
@@ -78,6 +81,7 @@ class Application:
             self.current_character_index = real_index
             char_name = self.get_current_character()
             logger.info(f"已切换到角色: {char_name}")
+            self._roll_next_randoms()
             threading.Thread(target=self.generate_and_save_images, args=(char_name,)).start()
         else:
             logger.warning(f"Invalid character index: {index}")
@@ -100,6 +104,23 @@ class Application:
         else:
             logger.warning(f"Invalid background index: {index}")
 
+    def _roll_next_randoms(self):
+        char_name = self.get_current_character()
+        emotion_count = CHARACTERS[char_name]["emotion_count"]
+        
+        # Roll expression
+        emotion_idx = random.randint(0, emotion_count - 1)
+        if self.last_image_index != -1 and emotion_count > 1:
+             last_emotion = (self.last_image_index - 1) // 16
+             for _ in range(5):
+                 if emotion_idx != last_emotion:
+                     break
+                 emotion_idx = random.randint(0, emotion_count - 1)
+        self.next_expression = emotion_idx + 1
+        
+        # Roll background
+        self.next_background = random.randint(1, 16)
+
     def print_help(self):
         print("Available commands:")
         print("  char [name|index]  Switch character. No arg to cycle.")
@@ -111,8 +132,18 @@ class Application:
 
     def print_info(self):
         char_name = self.get_current_character()
-        expr_str = str(self.expression) if self.expression else "Random"
-        bg_str = str(self.background) if self.background else "Random"
+        
+        if self.expression:
+            expr_str = str(self.expression)
+        else:
+            if self.next_expression is None: self._roll_next_randoms()
+            expr_str = f"Random (Next: {self.next_expression})"
+            
+        if self.background:
+            bg_str = str(self.background)
+        else:
+            if self.next_background is None: self._roll_next_randoms()
+            bg_str = f"Random (Next: {self.next_background})"
         
         print(f"\n=== Current Status ===")
         print(f"Character:  {char_name} ({self.current_character_index + 1}/{len(self.character_list)})")
@@ -166,6 +197,7 @@ class Application:
         arg = args[0].lower()
         if arg in ['random', '0']:
             self.expression = None
+            self._roll_next_randoms()
             logger.info("Expression set to Random")
             self.print_info()
         elif arg.isdigit():
@@ -184,6 +216,7 @@ class Application:
         arg = args[0].lower()
         if arg in ['random', '0']:
             self.background = None
+            self._roll_next_randoms()
             logger.info("Background set to Random")
             self.print_info()
         elif arg.isdigit():
@@ -247,31 +280,26 @@ class Application:
 
     def get_random_base_image(self):
         char_name = self.get_current_character()
-        emotion_count = CHARACTERS[char_name]["emotion_count"]
         
         # Determine emotion index (0-based)
         if self.expression:
             emotion_idx = self.expression - 1
         else:
-            emotion_idx = random.randint(0, emotion_count - 1)
-            # Avoid same emotion consecutively if possible, only if background is also random or we want variety
-            if self.last_image_index != -1 and emotion_count > 1 and not self.expression:
-                 last_emotion = (self.last_image_index - 1) // 16
-                 for _ in range(5):
-                     if emotion_idx != last_emotion:
-                         break
-                     emotion_idx = random.randint(0, emotion_count - 1)
+            if self.next_expression is None:
+                self._roll_next_randoms()
+            emotion_idx = self.next_expression - 1
 
         # Determine background index (0-based)
         if self.background:
             bg_idx = self.background - 1
         else:
-            bg_idx = random.randint(0, 15) # 16 backgrounds
+            if self.next_background is None:
+                self._roll_next_randoms()
+            bg_idx = self.next_background - 1
 
         # Calculate image number (1-based)
         img_num = emotion_idx * 16 + bg_idx + 1
         
-        self.last_image_index = img_num
         return os.path.join(self.magic_cut_folder, f"{char_name} ({img_num}).jpg")
 
     def process_generation(self):
@@ -303,6 +331,15 @@ class Application:
             if not os.path.exists(base_image_path):
                 logger.warning(f"Base image not found: {base_image_path}. Please wait for loading.")
                 return
+
+            # Extract img_num for updating state later
+            try:
+                filename = os.path.basename(base_image_path)
+                # format: Name (123).jpg
+                img_num_str = filename.rsplit('(', 1)[1].split(')')[0]
+                current_img_num = int(img_num_str)
+            except:
+                current_img_num = -1
 
             char_name = self.get_current_character()
             
@@ -366,6 +403,10 @@ class Application:
                 time.sleep(OPERATION_TIMEOUT)
                 PlatformUtils.simulate_enter()
                 logger.info("Done.")
+                
+                # Update state
+                self.last_image_index = current_img_num
+                self._roll_next_randoms()
             else:
                 logger.error("Generation failed.")
 
