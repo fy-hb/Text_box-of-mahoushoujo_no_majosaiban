@@ -123,12 +123,12 @@ class Application:
 
     def print_help(self):
         print("Available commands:")
-        print("  char [name|index]  Switch character. No arg to cycle.")
-        print("  expr [index]       Switch expression. No arg to cycle. '0' or 'random' for random.")
-        print("  bg [index]         Switch background. No arg to cycle. '0' or 'random' for random.")
-        print("  info               Show current settings and preview.")
-        print("  help               Show this help.")
-        print("  exit / quit        Exit application.")
+        print("  char / c [name|index]  Switch character. No arg to cycle.")
+        print("  expr / e [index]       Switch expression. No arg to cycle. '0' or 'random' for random.")
+        print("  bg / b [index]         Switch background. No arg to cycle. '0' or 'random' for random.")
+        print("  info / i               Show current settings and preview.")
+        print("  help / h / ?           Show this help.")
+        print("  exit / quit / q        Exit application.")
 
     def print_info(self):
         char_name = self.get_current_character()
@@ -433,19 +433,19 @@ class Application:
                 cmd = cmd_line[0].lower()
                 args = cmd_line[1:]
                 
-                if cmd == 'help':
+                if cmd in ['help', '?', 'h']:
                     self.print_help()
-                elif cmd == 'char':
+                elif cmd in ['char', 'c']:
                     self.handle_char_cmd(args)
-                elif cmd == 'expr':
+                elif cmd in ['expr', 'e']:
                     self.handle_expr_cmd(args)
-                elif cmd == 'bg':
+                elif cmd in ['bg', 'b']:
                     self.handle_bg_cmd(args)
-                elif cmd == 'info':
+                elif cmd in ['info', 'i']:
                     self.print_info()
                 elif cmd == 'clear':
                     self.clear_images()
-                elif cmd in ['exit', 'quit']:
+                elif cmd in ['exit', 'quit', 'q']:
                     self.running = False
                     logger.info("Exiting...")
                     os._exit(0)
