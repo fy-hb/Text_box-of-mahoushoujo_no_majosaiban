@@ -14,6 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.utils.platform_utils import PlatformUtils
 from src.utils.resource_utils import get_resource_path
+from src.utils.kitty_utils import display_image
 from src.core.image_processor import ImageProcessor
 from src.config import CHARACTERS, TEXT_CONFIGS, WINDOW_WHITELIST, MAHOSHOJO_POSITION, MAHOSHOJO_OVER, OPERATION_TIMEOUT
 
@@ -27,6 +28,7 @@ class Application:
         self.current_character_index = 2 # Default to Sherri
         self.character_list = list(CHARACTERS.keys())
         self.expression: Optional[int] = None
+        self.background: Optional[int] = None
         self.last_image_index = -1
         self.last_generation_end_time = 0
 
@@ -86,6 +88,109 @@ class Application:
         if 1 <= index <= emotion_count:
             logger.info(f"已切换至第{index}个表情")
             self.expression = index
+            self.print_info()
+        else:
+            logger.warning(f"Invalid expression index: {index}")
+
+    def switch_background(self, index):
+        if 1 <= index <= 16:
+            logger.info(f"已切换至第{index}个背景")
+            self.background = index
+            self.print_info()
+        else:
+            logger.warning(f"Invalid background index: {index}")
+
+    def print_help(self):
+        print("Available commands:")
+        print("  char [name|index]  Switch character. No arg to cycle.")
+        print("  expr [index]       Switch expression. No arg to cycle. '0' or 'random' for random.")
+        print("  bg [index]         Switch background. No arg to cycle. '0' or 'random' for random.")
+        print("  info               Show current settings and preview.")
+        print("  help               Show this help.")
+        print("  exit / quit        Exit application.")
+
+    def print_info(self):
+        char_name = self.get_current_character()
+        expr_str = str(self.expression) if self.expression else "Random"
+        bg_str = str(self.background) if self.background else "Random"
+        
+        print(f"\n=== Current Status ===")
+        print(f"Character:  {char_name} ({self.current_character_index + 1}/{len(self.character_list)})")
+        print(f"Expression: {expr_str}")
+        print(f"Background: {bg_str}")
+        
+        # Preview
+        # We generate a temporary path or just use get_random_base_image logic to find a file
+        # that represents current state.
+        preview_path = self.get_random_base_image()
+        if os.path.exists(preview_path):
+            print("Preview:")
+            display_image(preview_path)
+        else:
+            print("(Preview not available - image not generated yet)")
+        print("======================\n")
+
+    def handle_char_cmd(self, args):
+        if not args:
+            # Cycle
+            new_index = (self.current_character_index + 1) % len(self.character_list)
+            self.switch_character(new_index + 1) # switch_character takes 1-based index
+            self.print_info()
+            return
+
+        arg = args[0]
+        if arg.isdigit():
+            idx = int(arg)
+            self.switch_character(idx)
+            self.print_info()
+        else:
+            # Try to find by name
+            try:
+                idx = self.character_list.index(arg)
+                self.switch_character(idx + 1)
+                self.print_info()
+            except ValueError:
+                print(f"Character '{arg}' not found.")
+
+    def handle_expr_cmd(self, args):
+        char_name = self.get_current_character()
+        emotion_count = CHARACTERS[char_name]["emotion_count"]
+        
+        if not args:
+            # Cycle
+            current = self.expression if self.expression else 0
+            new_expr = (current % emotion_count) + 1
+            self.switch_expression(new_expr)
+            return
+
+        arg = args[0].lower()
+        if arg in ['random', '0']:
+            self.expression = None
+            logger.info("Expression set to Random")
+            self.print_info()
+        elif arg.isdigit():
+            self.switch_expression(int(arg))
+        else:
+            print("Invalid expression argument.")
+
+    def handle_bg_cmd(self, args):
+        if not args:
+            # Cycle
+            current = self.background if self.background else 0
+            new_bg = (current % 16) + 1
+            self.switch_background(new_bg)
+            return
+
+        arg = args[0].lower()
+        if arg in ['random', '0']:
+            self.background = None
+            logger.info("Background set to Random")
+            self.print_info()
+        elif arg.isdigit():
+            self.switch_background(int(arg))
+        else:
+            print("Invalid background argument.")
+
 
     def clear_images(self):
         logger.info("Clearing images...")
@@ -143,36 +248,31 @@ class Application:
     def get_random_base_image(self):
         char_name = self.get_current_character()
         emotion_count = CHARACTERS[char_name]["emotion_count"]
-        total_images = 16 * emotion_count
         
+        # Determine emotion index (0-based)
         if self.expression:
-            # Specific expression
-            # Expression is 1-based index of emotion.
-            # Range for expression k: (k-1)*16 + 1 to k*16
-            start = (self.expression - 1) * 16 + 1
-            end = self.expression * 16
-            i = random.randint(start, end)
-            self.last_image_index = i
-            self.expression = None # Reset after use? Original code does.
-            return os.path.join(self.magic_cut_folder, f"{char_name} ({i}).jpg")
+            emotion_idx = self.expression - 1
+        else:
+            emotion_idx = random.randint(0, emotion_count - 1)
+            # Avoid same emotion consecutively if possible, only if background is also random or we want variety
+            if self.last_image_index != -1 and emotion_count > 1 and not self.expression:
+                 last_emotion = (self.last_image_index - 1) // 16
+                 for _ in range(5):
+                     if emotion_idx != last_emotion:
+                         break
+                     emotion_idx = random.randint(0, emotion_count - 1)
+
+        # Determine background index (0-based)
+        if self.background:
+            bg_idx = self.background - 1
+        else:
+            bg_idx = random.randint(0, 15) # 16 backgrounds
+
+        # Calculate image number (1-based)
+        img_num = emotion_idx * 16 + bg_idx + 1
         
-        # Random logic to avoid same emotion consecutively
-        max_attempts = 100
-        attempts = 0
-        
-        while attempts < max_attempts:
-            i = random.randint(1, total_images)
-            current_emotion = (i - 1) // 16
-            last_emotion = (self.last_image_index - 1) // 16 if self.last_image_index != -1 else -1
-            
-            if self.last_image_index == -1 or current_emotion != last_emotion:
-                self.last_image_index = i
-                return os.path.join(self.magic_cut_folder, f"{char_name} ({i}).jpg")
-            
-            attempts += 1
-        
-        self.last_image_index = i
-        return os.path.join(self.magic_cut_folder, f"{char_name} ({i}).jpg")
+        self.last_image_index = img_num
+        return os.path.join(self.magic_cut_folder, f"{char_name} ({img_num}).jpg")
 
     def process_generation(self):
         if time.time() - self.last_generation_end_time < 0.5:
@@ -274,32 +374,58 @@ class Application:
 
     def run(self):
         logger.info("Starting application...")
-        logger.info("Press Esc to exit.")
         
+        # Start hotkey listener in a separate thread
+        hotkey_thread = threading.Thread(target=self.start_hotkey_listener, daemon=True)
+        hotkey_thread.start()
+        
+        self.print_help()
+        self.print_info()
+        
+        while self.running:
+            try:
+                # Use input() for command loop
+                cmd_input = input("> ")
+                cmd_line = cmd_input.strip().split()
+                if not cmd_line: continue
+                
+                cmd = cmd_line[0].lower()
+                args = cmd_line[1:]
+                
+                if cmd == 'help':
+                    self.print_help()
+                elif cmd == 'char':
+                    self.handle_char_cmd(args)
+                elif cmd == 'expr':
+                    self.handle_expr_cmd(args)
+                elif cmd == 'bg':
+                    self.handle_bg_cmd(args)
+                elif cmd == 'info':
+                    self.print_info()
+                elif cmd == 'clear':
+                    self.clear_images()
+                elif cmd in ['exit', 'quit']:
+                    self.running = False
+                    logger.info("Exiting...")
+                    os._exit(0)
+                else:
+                    print("Unknown command. Type 'help' for list.")
+            except (EOFError, KeyboardInterrupt):
+                self.running = False
+                print("\nExiting...")
+                os._exit(0)
+            except Exception as e:
+                logger.error(f"Error in command loop: {e}")
+
+    def start_hotkey_listener(self):
         platform_name = PlatformUtils.get_platform()
         
         if platform_name == 'windows':
             try:
                 import keyboard
-                # Register hotkeys
-                for i in range(1, 10):
-                    keyboard.add_hotkey(f'ctrl+{i}', lambda idx=i: self.switch_character(idx))
-                
-                keyboard.add_hotkey('ctrl+q', lambda: self.switch_character(10))
-                keyboard.add_hotkey('ctrl+e', lambda: self.switch_character(11))
-                keyboard.add_hotkey('ctrl+r', lambda: self.switch_character(12))
-                keyboard.add_hotkey('ctrl+t', lambda: self.switch_character(13))
-                keyboard.add_hotkey('ctrl+y', lambda: self.switch_character(14)) # 14th character
-                
-                keyboard.add_hotkey('ctrl+0', self.show_current_character)
-                keyboard.add_hotkey('ctrl+tab', self.clear_images)
-                
-                for i in range(1, 10):
-                    keyboard.add_hotkey(f'alt+{i}', lambda idx=i: self.switch_expression(idx))
-                
+                # Only keep generation hotkey
                 keyboard.add_hotkey('alt+enter', self.process_generation)
-                
-                keyboard.wait('esc')
+                keyboard.wait()
             except ImportError:
                 logger.error("Keyboard module not found. Please install it.")
         else:
@@ -309,26 +435,9 @@ class Application:
                 def on_activate_gen():
                     self.process_generation()
                 
-                def make_switch(idx):
-                    return lambda: self.switch_character(idx)
-                
-                def make_expr(idx):
-                    return lambda: self.switch_expression(idx)
-
                 hotkeys = {
-                    '<ctrl>+0': self.show_current_character,
                     '<alt>+<enter>': on_activate_gen,
-                    '<ctrl>+<tab>': self.clear_images,
-                    '<ctrl>+q': make_switch(10),
-                    '<ctrl>+e': make_switch(11),
-                    '<ctrl>+r': make_switch(12),
-                    '<ctrl>+t': make_switch(13),
-                    '<ctrl>+y': make_switch(14),
                 }
-                
-                for i in range(1, 10):
-                    hotkeys[f'<ctrl>+{i}'] = make_switch(i)
-                    hotkeys[f'<alt>+{i}'] = make_expr(i)
                 
                 with keyboard.GlobalHotKeys(hotkeys) as h:
                     h.join()
