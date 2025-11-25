@@ -107,3 +107,5 @@ TEXT_CONFIGS = {
 WINDOW_WHITELIST = ["TIM.exe", "WeChat.exe", "Weixin.exe", "WeChatApp.exe", "QQ.exe"]
 MAHOSHOJO_POSITION = [728, 355]
 MAHOSHOJO_OVER = [2339, 800]
+
+OPERATION_TIMEOUT = 0.08 # Seconds

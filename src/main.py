@@ -15,7 +15,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.utils.platform_utils import PlatformUtils
 from src.utils.resource_utils import get_resource_path
 from src.core.image_processor import ImageProcessor
-from src.config import CHARACTERS, TEXT_CONFIGS, WINDOW_WHITELIST, MAHOSHOJO_POSITION, MAHOSHOJO_OVER
+from src.config import CHARACTERS, TEXT_CONFIGS, WINDOW_WHITELIST, MAHOSHOJO_POSITION, MAHOSHOJO_OVER, OPERATION_TIMEOUT
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -175,7 +175,7 @@ class Application:
         return os.path.join(self.magic_cut_folder, f"{char_name} ({i}).jpg")
 
     def process_generation(self):
-        if time.time() - self.last_generation_end_time < 1.0:
+        if time.time() - self.last_generation_end_time < 0.5:
             logger.debug("Ignoring trigger due to cooldown.")
             return
 
@@ -261,9 +261,9 @@ class Application:
                 logger.debug("Start copying image to clipboard")
                 PlatformUtils.copy_image_to_clipboard(png_bytes)
                 logger.debug("Finished copying image to clipboard")
-                time.sleep(0.2)
+                time.sleep(OPERATION_TIMEOUT)
                 PlatformUtils.simulate_paste()
-                time.sleep(0.2)
+                time.sleep(OPERATION_TIMEOUT)
                 PlatformUtils.simulate_enter()
                 logger.info("Done.")
             else:

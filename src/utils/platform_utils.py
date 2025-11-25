@@ -22,6 +22,8 @@ PLATFORM = platform.system().lower()
 HAS_WIN32 = False
 HAS_PYNPUT = False
 
+from src.config import OPERATION_TIMEOUT
+
 if PLATFORM == 'windows':
     try:
         import win32clipboard
@@ -124,7 +126,7 @@ class PlatformUtils:
                     ['xclip', '-selection', 'clipboard', '-t', 'image/png', '-i'], 
                     stdin=subprocess.PIPE, stderr=subprocess.PIPE
                 )
-                process.communicate(input=png_bytes, timeout=0.1)
+                process.communicate(input=png_bytes, timeout=OPERATION_TIMEOUT)
                 if process.returncode == 0:
                     return True
                 else:
@@ -140,7 +142,7 @@ class PlatformUtils:
                     ['wl-copy', '-t', 'image/png'], 
                     stdin=subprocess.PIPE, stderr=subprocess.PIPE
                 )
-                process.communicate(input=png_bytes, timeout=0.1)
+                process.communicate(input=png_bytes, timeout=OPERATION_TIMEOUT)
                 if process.returncode == 0:
                     return True
                 else:
@@ -277,7 +279,7 @@ class PlatformUtils:
             logger.debug("Start simulate Ctrl+A (windows)")
             win_keyboard.send('ctrl+a')
             logger.debug("Finished simulate Ctrl+A (windows)")
-            time.sleep(0.05)
+            time.sleep(OPERATION_TIMEOUT)
             logger.debug("Start simulate Ctrl+X (windows)")
             win_keyboard.send('ctrl+x')
             logger.debug("Finished simulate Ctrl+X (windows)")
@@ -289,7 +291,7 @@ class PlatformUtils:
                 c.press('a')
                 c.release('a')
             logger.debug("Finished simulate Ctrl+A (pynput)")
-            time.sleep(0.05)
+            time.sleep(OPERATION_TIMEOUT)
             logger.debug("Start simulate Ctrl+X (pynput)")
             with c.pressed(modifier):
                 c.press('x')
