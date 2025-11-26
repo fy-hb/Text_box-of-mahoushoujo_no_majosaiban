@@ -393,7 +393,8 @@ class Application:
                     font_path=self.get_current_font()
                 )
             elif text:
-                logger.info(f"Processing text: {text[:20].replace('\n', ' ')}...")
+                preview_text = text[:20].replace('\n', ' ')
+                logger.info(f"Processing text: {preview_text}...")
                 highlight_args = {}
                 if char_name == "anan":
                     highlight_args = {"bracket_color": (159, 145, 251)}
