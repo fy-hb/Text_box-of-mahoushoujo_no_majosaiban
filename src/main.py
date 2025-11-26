@@ -251,7 +251,7 @@ class Application:
                 for j in range(emotion_count):
                     # Resources are now in resources/
                     bg_path = get_resource_path(os.path.join("resources", "background", f"c{i+1}.png"))
-                    char_path = get_resource_path(os.path.join("resources", character_name, f"{character_name} ({j+1}).png"))
+                    char_path = get_resource_path(os.path.join("resources", "char", character_name, f"{character_name} ({j+1}).png"))
                     
                     if not os.path.exists(bg_path):
                         logger.warning(f"Background not found: {bg_path}")

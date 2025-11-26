@@ -3,11 +3,7 @@ import os
 from base64 import standard_b64encode
 from io import BytesIO
 
-try:
-    from PIL import Image
-except Exception as e:
-    print("需要 Pillow (PIL)。请运行: pip install pillow", file=sys.stderr)
-    raise SystemExit(1)
+from PIL import Image
 
 
 ESC = b'\x1b'   # escape
