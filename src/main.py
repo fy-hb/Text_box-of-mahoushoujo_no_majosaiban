@@ -181,7 +181,7 @@ class Application:
     def print_char_list(self):
         print("\nAvailable characters:")
         for idx, name in enumerate(self.character_list, start=1):
-            print(f"  {idx}. {''.join(i["text"] for i in TEXT_CONFIGS[name])}({name})")
+            print(f"  {idx}. {''.join(i['text'] for i in TEXT_CONFIGS[name])}({name})")
 
     def handle_char_cmd(self, args):
         if not args:
