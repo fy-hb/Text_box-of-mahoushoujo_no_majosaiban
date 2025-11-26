@@ -137,7 +137,8 @@ class Application:
             print("  exit / quit / q        退出")
 
         print("\n快捷键说明:")
-        print(f"  {'Alt + Enter' if self.use_alt else 'Enter      '}        生成图片")
+        print("  Alt + P            生成图片")
+        print(f"  {'Alt + Enter' if self.use_alt else 'Enter      '}        生成并发送")
         print("  Alt + Esc          退出程序")
 
         if self.enable_hotkeys:
@@ -323,8 +324,8 @@ class Application:
         img_num = emotion_idx * 16 + bg_idx + 1
         
         return os.path.join(self.magic_cut_folder, f"{char_name} ({img_num}).jpg")
-
-    def process_generation(self):
+    
+    def process_generate_and_send(self):
         # Check whitelist
         if self.enable_whitelist:
             active_window = PlatformUtils.get_active_window_process_name()
@@ -336,7 +337,12 @@ class Application:
         if time.time() - self.last_generation_end_time < 0.5:
             logger.debug("Ignoring trigger due to cooldown.")
             return
+        
+        if self.process_generation():
+            time.sleep(OPERATION_TIMEOUT)
+            PlatformUtils.simulate_enter()
 
+    def process_generation(self) -> bool:
         logger.info("Start generate...")
 
         # Sleep
@@ -344,19 +350,13 @@ class Application:
 
         # Simulate Cut
         PlatformUtils.simulate_cut()
-        
-        # Run in thread
-        # threading.Thread(target=self._generate_task).start()
-        self._generate_task()
-        self.last_generation_end_time = time.time()
 
-    def _generate_task(self):
         logger.debug("Start generating task")
         try:
             base_image_path = self.get_random_base_image()
             if not os.path.exists(base_image_path):
                 logger.warning(f"Base image not found: {base_image_path}. Please wait for loading.")
-                return
+                return False
 
             # Extract img_num for updating state later
             try:
@@ -375,7 +375,7 @@ class Application:
             
             if not text and image is None:
                 logger.info("No text or image in clipboard.")
-                return
+                return False
 
             png_bytes = None
             
@@ -427,18 +427,20 @@ class Application:
                 logger.debug("Finished copying image to clipboard")
                 time.sleep(OPERATION_TIMEOUT)
                 PlatformUtils.simulate_paste()
-                time.sleep(OPERATION_TIMEOUT)
-                PlatformUtils.simulate_enter()
                 logger.info("Done.")
-                
                 # Update state
                 self.last_image_index = current_img_num
                 self._roll_next_randoms()
+                self.last_generation_end_time = time.time()
+                return True
             else:
                 logger.error("Generation failed.")
 
         except Exception as e:
             logger.error(f"Task error: {e}", exc_info=True)
+        
+        self.last_generation_end_time = time.time()
+        return False
 
     def _start_hotkey_service(self):
         logger.info("Starting hotkey service...")
@@ -467,11 +469,12 @@ class Application:
                         keyboard.add_hotkey(f'alt+{i}', lambda idx=i: self._run_with_clear(self.switch_expression, idx))
 
                     keyboard.add_hotkey('alt+l', lambda: self._run_with_clear(self.print_char_list))
+                    keyboard.add_hotkey('alt+p', lambda: self._run_with_clear(self.process_generation))
 
                 def on_activate_gen():
                     if self.use_alt:
                         time.sleep(4 * OPERATION_TIMEOUT)
-                    self._run_with_clear(self.process_generation)
+                    self._run_with_clear(self.process_generate_and_send)
 
                 keyboard.add_hotkey(f'{"alt+" if self.use_alt else ""}enter', lambda: on_activate_gen(),
                                     suppress=not self.use_alt,
@@ -493,7 +496,7 @@ class Application:
                 from pynput import keyboard
 
                 def on_activate_gen():
-                    self._run_with_clear(self.process_generation)
+                    self._run_with_clear(self.process_generate_and_send)
 
                 def on_exit():
                     logger.info("Exiting...")
@@ -508,6 +511,7 @@ class Application:
                 hotkeys = {
                     f'{"<alt>+" if self.use_alt else ""}<enter>': on_activate_gen,
                     '<alt>+<esc>': on_exit,
+                    '<alt>+p': lambda: self._run_with_clear(self.process_generation),
                 }
 
                 if self.enable_hotkeys:
@@ -610,12 +614,13 @@ if __name__ == "__main__":
     parser.add_argument('--key', dest='key', action='store_true', default=True, help='Enable hotkeys (default: True)')
     parser.add_argument('--no-key', dest='key', action='store_false', help='Disable hotkeys')
     parser.add_argument('--cmd', action='store_true', default=False, help='Enable command line interface (default: False)')
-    parser.add_argument('--use-alt', dest='use_alt', action='store_true', default=False, help='Use Alt+Enter instead of Enter (default: False)')
+    if PlatformUtils.get_platform() == 'windows':
+        parser.add_argument('--use-alt', dest='use_alt', action='store_true', default=False, help='Use Alt+Enter instead of Enter (default: False)')
     args = parser.parse_args()
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
         logger.info("Debug mode enabled")
 
-    app = Application(enable_hotkeys=args.key, enable_cmd=args.cmd, use_alt=args.use_alt)
+    app = Application(enable_hotkeys=args.key, enable_cmd=args.cmd, use_alt=args.use_alt if PlatformUtils.get_platform() == 'windows' else True)
     app.run()
