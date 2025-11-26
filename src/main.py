@@ -606,3 +606,16 @@ class Application:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
+    parser.add_argument('--key', dest='key', action='store_true', default=True, help='Enable hotkeys (default: True)')
+    parser.add_argument('--no-key', dest='key', action='store_false', help='Disable hotkeys')
+    parser.add_argument('--cmd', action='store_true', default=False, help='Enable command line interface (default: False)')
+    parser.add_argument('--use-alt', dest='use_alt', action='store_true', default=False, help='Use Alt+Enter instead of Enter (default: False)')
+    args = parser.parse_args()
+
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.info("Debug mode enabled")
+
+    app = Application(enable_hotkeys=args.key, enable_cmd=args.cmd, use_alt=args.use_alt)
+    app.run()
