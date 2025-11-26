@@ -132,18 +132,20 @@ class Application:
             print("  bg / b [index]         切换背景。无参数则循环切换。'0' 或 'random' 表示随机。")
             print("  info / i               显示当前设置和预览。")
             print("  help / h / ?           显示此帮助。")
+            print("  list / ls / l          打印角色列表。")
             print("  exit / quit / q        退出")
 
+        print("\n快捷键说明:")
+        print("  Alt + Enter        生成图片")
+        print("  Alt + Esc          退出程序")
+
         if self.enable_hotkeys:
-            print("\n快捷键说明:")
             print("  Ctrl + 1-9         切换至角色 1-9")
             print("  Ctrl + Q/E/R/T/Y   切换至角色 10-14")
             print("  Ctrl + 0           显示当前角色信息")
             print("  Ctrl + Tab         清空生成的图片")
             print("  Alt + 1-9          切换至表情 1-9")
-            print("  Alt + Enter        生成图片")
-            if not self.enable_cmd:
-                print("  Esc                退出程序")
+            print("  Alt + L            打印角色列表")
 
     def print_info(self):
         char_name = self.get_current_character()
@@ -175,6 +177,11 @@ class Application:
         else:
             print("(Preview not available - image not generated yet)")
         print("======================\n")
+
+    def print_char_list(self):
+        print("Available characters:")
+        for idx, name in enumerate(self.character_list, start=1):
+            print(f"  {idx}. {''.join(i["text"] for i in TEXT_CONFIGS[name])}({name})")
 
     def handle_char_cmd(self, args):
         if not args:
@@ -238,7 +245,6 @@ class Application:
             self.switch_background(int(arg))
         else:
             print("Invalid background argument.")
-
 
     def clear_images(self):
         logger.info("Clearing images...")
@@ -428,37 +434,42 @@ class Application:
         except Exception as e:
             logger.error(f"Task error: {e}", exc_info=True)
 
-    def _start_hotkey_service(self, blocking=True):
+    def _start_hotkey_service(self):
         logger.info("Starting hotkey service...")
-        if blocking:
-            logger.info("Press Esc to exit.")
 
         platform_name = PlatformUtils.get_platform()
 
         if platform_name == 'windows':
             try:
                 import keyboard
-                # Register hotkeys
-                for i in range(1, 10):
-                    keyboard.add_hotkey(f'ctrl+{i}', lambda idx=i: self.switch_character(idx))
+                if self.enable_hotkeys:
+                    # Register hotkeys
+                    for i in range(1, 10):
+                        keyboard.add_hotkey(f'ctrl+{i}', lambda idx=i: self.switch_character(idx))
 
-                keyboard.add_hotkey('ctrl+q', lambda: self.switch_character(10))
-                keyboard.add_hotkey('ctrl+e', lambda: self.switch_character(11))
-                keyboard.add_hotkey('ctrl+r', lambda: self.switch_character(12))
-                keyboard.add_hotkey('ctrl+t', lambda: self.switch_character(13))
-                keyboard.add_hotkey('ctrl+y', lambda: self.switch_character(14)) # 14th character
+                    keyboard.add_hotkey('ctrl+q', lambda: self.switch_character(10))
+                    keyboard.add_hotkey('ctrl+e', lambda: self.switch_character(11))
+                    keyboard.add_hotkey('ctrl+r', lambda: self.switch_character(12))
+                    keyboard.add_hotkey('ctrl+t', lambda: self.switch_character(13))
+                    keyboard.add_hotkey('ctrl+y', lambda: self.switch_character(14)) # 14th character
 
-                # keyboard.add_hotkey('ctrl+0', self.show_current_character)
-                keyboard.add_hotkey('ctrl+0', self.print_info)
-                keyboard.add_hotkey('ctrl+tab', self.clear_images)
+                    # keyboard.add_hotkey('ctrl+0', self.show_current_character)
+                    keyboard.add_hotkey('ctrl+0', self.print_info)
+                    keyboard.add_hotkey('ctrl+tab', self.clear_images)
 
-                for i in range(1, 10):
-                    keyboard.add_hotkey(f'alt+{i}', lambda idx=i: self.switch_expression(idx))
+                    for i in range(1, 10):
+                        keyboard.add_hotkey(f'alt+{i}', lambda idx=i: self.switch_expression(idx))
+
+                    keyboard.add_hotkey('alt+l', self.print_char_list)
 
                 keyboard.add_hotkey('alt+enter', self.process_generation)
 
-                if blocking:
-                    keyboard.wait('esc')
+                def on_exit():
+                    logger.info("Exiting...")
+                    os._exit(0)
+
+                keyboard.add_hotkey('alt+esc', on_exit)
+
             except ImportError:
                 logger.error("Keyboard module not found. Please install it.")
         else:
@@ -468,6 +479,10 @@ class Application:
                 def on_activate_gen():
                     self.process_generation()
 
+                def on_exit():
+                    logger.info("Exiting...")
+                    os._exit(0)
+
                 def make_switch(idx):
                     return lambda: self.switch_character(idx)
 
@@ -475,22 +490,28 @@ class Application:
                     return lambda: self.switch_expression(idx)
 
                 hotkeys = {
-                    # '<ctrl>+0': self.show_current_character,
-                    '<ctrl>+0': self.print_info,
                     '<alt>+<enter>': on_activate_gen,
-                    '<ctrl>+<tab>': self.clear_images,
-                    '<ctrl>+q': make_switch(10),
-                    '<ctrl>+e': make_switch(11),
-                    '<ctrl>+r': make_switch(12),
-                    '<ctrl>+t': make_switch(13),
-                    '<ctrl>+y': make_switch(14),
+                    '<alt>+<esc>': on_exit,
                 }
 
-                for i in range(1, 10):
-                    hotkeys[f'<ctrl>+{i}'] = make_switch(i)
-                    hotkeys[f'<alt>+{i}'] = make_expr(i)
+                if self.enable_hotkeys:
+                    hotkeys.update({
+                        # '<ctrl>+0': self.show_current_character,
+                        '<ctrl>+0': self.print_info,
+                        '<alt>+l': self.print_char_list,
+                        '<ctrl>+<tab>': self.clear_images,
+                        '<ctrl>+q': make_switch(10),
+                        '<ctrl>+e': make_switch(11),
+                        '<ctrl>+r': make_switch(12),
+                        '<ctrl>+t': make_switch(13),
+                        '<ctrl>+y': make_switch(14),
+                    })
 
-                if blocking:
+                    for i in range(1, 10):
+                        hotkeys[f'<ctrl>+{i}'] = make_switch(i)
+                        hotkeys[f'<alt>+{i}'] = make_expr(i)
+
+                if not self.enable_cmd:
                     with keyboard.GlobalHotKeys(hotkeys) as h:
                         h.join()
                 else:
@@ -504,17 +525,12 @@ class Application:
         logger.info("Starting application...")
 
         self.print_help()
+
+        self.print_char_list()
         
-        if self.enable_hotkeys:
-            if self.enable_cmd:
-                self._start_hotkey_service(blocking=False)
-            elif not self.enable_cmd:
-                self._start_hotkey_service(blocking=True)
-                return
+        self._start_hotkey_service()
         
         if self.enable_cmd:
-            self.print_info()
-            
             while self.running:
                 try:
                     # Use input() for command loop
@@ -527,6 +543,8 @@ class Application:
                     
                     if cmd in ['help', '?', 'h']:
                         self.print_help()
+                    elif cmd in ['ls', 'list', 'l']:
+                        self.print_char_list()
                     elif cmd in ['char', 'c']:
                         self.handle_char_cmd(args)
                     elif cmd in ['expr', 'e']:
