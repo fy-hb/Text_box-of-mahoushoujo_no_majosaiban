@@ -137,7 +137,7 @@ class Application:
             print("  exit / quit / q        退出")
 
         print("\n快捷键说明:")
-        print("  Alt + P            生成图片")
+        print("  Alt + P            为选中内容生成图片")
         print(f"  {'Alt + Enter' if self.use_alt else 'Enter      '}        生成并发送")
         print("  Alt + Esc          退出程序")
 
@@ -338,6 +338,9 @@ class Application:
             logger.debug("Ignoring trigger due to cooldown.")
             return
         
+        PlatformUtils.simulate_Ctrl_('a')
+        time.sleep(OPERATION_TIMEOUT)
+        
         if self.process_generation():
             time.sleep(OPERATION_TIMEOUT)
             PlatformUtils.simulate_enter()
@@ -345,11 +348,11 @@ class Application:
     def process_generation(self) -> bool:
         logger.info("Start generate...")
 
+        # Simulate Cut
+        PlatformUtils.simulate_Ctrl_('c')
+
         # Sleep
         time.sleep(OPERATION_TIMEOUT)
-
-        # Simulate Cut
-        PlatformUtils.simulate_cut()
 
         logger.debug("Start generating task")
         try:

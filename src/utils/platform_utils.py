@@ -267,54 +267,35 @@ class PlatformUtils:
             except Exception:
                 return None
         return None
+    
+    @staticmethod
+    def simulate_Ctrl_(key: str):
+        """Simulate Ctrl+?."""
+        logger.debug(f"Start simulate Ctrl+{key}")
+        if PLATFORM == 'windows' and HAS_WIN32:
+            win_keyboard.send(f'ctrl+{key}')
+        elif HAS_PYNPUT:
+            c = Controller()
+            modifier = Key.cmd if PLATFORM == 'darwin' else Key.ctrl
+            with c.pressed(modifier):
+                c.press(key)
+                c.release(key)
+        logger.debug(f"Finished simulate Ctrl+{key}")
 
     @staticmethod
     def simulate_cut():
         """Simulate Ctrl+A, Ctrl+X to cut text."""
-        logger.debug("Start simulate Cut")
         # Clear clipboard first
         pyperclip.copy("")
-        
-        if PLATFORM == 'windows' and HAS_WIN32:
-            logger.debug("Start simulate Ctrl+A (windows)")
-            win_keyboard.send('ctrl+a')
-            logger.debug("Finished simulate Ctrl+A (windows)")
-            time.sleep(OPERATION_TIMEOUT)
-            logger.debug("Start simulate Ctrl+X (windows)")
-            win_keyboard.send('ctrl+x')
-            logger.debug("Finished simulate Ctrl+X (windows)")
-        elif HAS_PYNPUT:
-            c = Controller()
-            modifier = Key.cmd if PLATFORM == 'darwin' else Key.ctrl
-            logger.debug("Start simulate Ctrl+A (pynput)")
-            with c.pressed(modifier):
-                c.press('a')
-                c.release('a')
-            logger.debug("Finished simulate Ctrl+A (pynput)")
-            time.sleep(OPERATION_TIMEOUT)
-            logger.debug("Start simulate Ctrl+X (pynput)")
-            with c.pressed(modifier):
-                c.press('x')
-                c.release('x')
-            logger.debug("Finished simulate Ctrl+X (pynput)")
-        time.sleep(0.1) # Wait for OS
+        __class__.simulate_Ctrl_('a')
+        time.sleep(OPERATION_TIMEOUT)
+        __class__.simulate_Ctrl_('x')
+        time.sleep(OPERATION_TIMEOUT)
 
     @staticmethod
     def simulate_paste():
         """Simulate Ctrl+V to paste."""
-        logger.debug("Start simulate Paste")
-        if PLATFORM == 'windows' and HAS_WIN32:
-            logger.debug("Start simulate Ctrl+V (windows)")
-            win_keyboard.send('ctrl+v')
-            logger.debug("Finished simulate Ctrl+V (windows)")
-        elif HAS_PYNPUT:
-            c = Controller()
-            modifier = Key.cmd if PLATFORM == 'darwin' else Key.ctrl
-            logger.debug("Start simulate Ctrl+V (pynput)")
-            with c.pressed(modifier):
-                c.press('v')
-                c.release('v')
-            logger.debug("Finished simulate Ctrl+V (pynput)")
+        __class__.simulate_Ctrl_('v')
 
     @staticmethod
     def simulate_enter():
