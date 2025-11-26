@@ -32,7 +32,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip
+          sudo apt-get install -y zip xvfb
 
       - name: Install uv and dependencies
         run: |
@@ -43,7 +43,11 @@ jobs:
 
       - name: Run PyInstaller
         run: |
-          python -m PyInstaller ./build_onefile.spec
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            xvfb-run --auto-servernum python -m PyInstaller ./build_onefile.spec
+          else
+            python -m PyInstaller ./build_onefile.spec
+          fi
         shell: bash
 
       - name: Package build output
