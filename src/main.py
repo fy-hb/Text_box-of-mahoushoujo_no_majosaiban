@@ -23,8 +23,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class Application:
-    def __init__(self):
+    def __init__(self, enable_hotkeys=True, enable_cmd=False):
         self.running = True
+        self.enable_hotkeys = enable_hotkeys
+        self.enable_cmd = enable_cmd
         self.current_character_index = 2 # Default to Sherri
         self.character_list = list(CHARACTERS.keys())
         self.next_expression: Optional[int] = None
@@ -47,7 +49,8 @@ class Application:
         self.enable_whitelist = True
         
         # Initialize
-        self.show_current_character()
+        # self.show_current_character()
+        self.print_info()
         self._roll_next_randoms()
         # We run generation in a separate thread to not block startup, 
         # but original code did it synchronously. We'll do it in background.
@@ -62,8 +65,8 @@ class Application:
         # Fonts are now in resources/fonts/
         return get_resource_path(os.path.join("resources", "fonts", font_name))
 
-    def show_current_character(self):
-        logger.info(f"当前角色: {self.get_current_character()}")
+    # def show_current_character(self):
+    #     logger.info(f"当前角色: {self.get_current_character()}")
 
     def switch_character(self, index):
         # Index is 1-based from hotkey, but we store 0-based index in list
@@ -122,13 +125,25 @@ class Application:
         self.next_background = random.randint(1, 16)
 
     def print_help(self):
-        print("Available commands:")
-        print("  char / c [name|index]  Switch character. No arg to cycle.")
-        print("  expr / e [index]       Switch expression. No arg to cycle. '0' or 'random' for random.")
-        print("  bg / b [index]         Switch background. No arg to cycle. '0' or 'random' for random.")
-        print("  info / i               Show current settings and preview.")
-        print("  help / h / ?           Show this help.")
-        print("  exit / quit / q        Exit application.")
+        if self.enable_cmd:
+            print("支持的命令:")
+            print("  char / c [name|index]  切换角色。无参数则循环切换。")
+            print("  expr / e [index]       切换表情。无参数则循环切换。'0' 或 'random' 表示随机。")
+            print("  bg / b [index]         切换背景。无参数则循环切换。'0' 或 'random' 表示随机。")
+            print("  info / i               显示当前设置和预览。")
+            print("  help / h / ?           显示此帮助。")
+            print("  exit / quit / q        退出")
+
+        if self.enable_hotkeys:
+            print("\n快捷键说明:")
+            print("  Ctrl + 1-9         切换至角色 1-9")
+            print("  Ctrl + Q/E/R/T/Y   切换至角色 10-14")
+            print("  Ctrl + 0           显示当前角色信息")
+            print("  Ctrl + Tab         清空生成的图片")
+            print("  Alt + 1-9          切换至表情 1-9")
+            print("  Alt + Enter        生成图片")
+            if not self.enable_cmd:
+                print("  Esc                退出程序")
 
     def print_info(self):
         char_name = self.get_current_character()
@@ -413,86 +428,143 @@ class Application:
         except Exception as e:
             logger.error(f"Task error: {e}", exc_info=True)
 
-    def run(self):
-        logger.info("Starting application...")
-        
-        # Start hotkey listener in a separate thread
-        hotkey_thread = threading.Thread(target=self.start_hotkey_listener, daemon=True)
-        hotkey_thread.start()
-        
-        self.print_help()
-        self.print_info()
-        
-        while self.running:
-            try:
-                # Use input() for command loop
-                cmd_input = input("> ")
-                cmd_line = cmd_input.strip().split()
-                if not cmd_line: continue
-                
-                cmd = cmd_line[0].lower()
-                args = cmd_line[1:]
-                
-                if cmd in ['help', '?', 'h']:
-                    self.print_help()
-                elif cmd in ['char', 'c']:
-                    self.handle_char_cmd(args)
-                elif cmd in ['expr', 'e']:
-                    self.handle_expr_cmd(args)
-                elif cmd in ['bg', 'b']:
-                    self.handle_bg_cmd(args)
-                elif cmd in ['info', 'i']:
-                    self.print_info()
-                elif cmd == 'clear':
-                    self.clear_images()
-                elif cmd in ['exit', 'quit', 'q']:
-                    self.running = False
-                    logger.info("Exiting...")
-                    os._exit(0)
-                else:
-                    print("Unknown command. Type 'help' for list.")
-            except (EOFError, KeyboardInterrupt):
-                self.running = False
-                print("\nExiting...")
-                os._exit(0)
-            except Exception as e:
-                logger.error(f"Error in command loop: {e}")
+    def _start_hotkey_service(self, blocking=True):
+        logger.info("Starting hotkey service...")
+        if blocking:
+            logger.info("Press Esc to exit.")
 
-    def start_hotkey_listener(self):
         platform_name = PlatformUtils.get_platform()
-        
+
         if platform_name == 'windows':
             try:
                 import keyboard
-                # Only keep generation hotkey
+                # Register hotkeys
+                for i in range(1, 10):
+                    keyboard.add_hotkey(f'ctrl+{i}', lambda idx=i: self.switch_character(idx))
+
+                keyboard.add_hotkey('ctrl+q', lambda: self.switch_character(10))
+                keyboard.add_hotkey('ctrl+e', lambda: self.switch_character(11))
+                keyboard.add_hotkey('ctrl+r', lambda: self.switch_character(12))
+                keyboard.add_hotkey('ctrl+t', lambda: self.switch_character(13))
+                keyboard.add_hotkey('ctrl+y', lambda: self.switch_character(14)) # 14th character
+
+                # keyboard.add_hotkey('ctrl+0', self.show_current_character)
+                keyboard.add_hotkey('ctrl+0', self.print_info)
+                keyboard.add_hotkey('ctrl+tab', self.clear_images)
+
+                for i in range(1, 10):
+                    keyboard.add_hotkey(f'alt+{i}', lambda idx=i: self.switch_expression(idx))
+
                 keyboard.add_hotkey('alt+enter', self.process_generation)
-                keyboard.wait()
+
+                if blocking:
+                    keyboard.wait('esc')
             except ImportError:
                 logger.error("Keyboard module not found. Please install it.")
         else:
             try:
                 from pynput import keyboard
-                
+
                 def on_activate_gen():
                     self.process_generation()
-                
+
+                def make_switch(idx):
+                    return lambda: self.switch_character(idx)
+
+                def make_expr(idx):
+                    return lambda: self.switch_expression(idx)
+
                 hotkeys = {
+                    # '<ctrl>+0': self.show_current_character,
+                    '<ctrl>+0': self.print_info,
                     '<alt>+<enter>': on_activate_gen,
+                    '<ctrl>+<tab>': self.clear_images,
+                    '<ctrl>+q': make_switch(10),
+                    '<ctrl>+e': make_switch(11),
+                    '<ctrl>+r': make_switch(12),
+                    '<ctrl>+t': make_switch(13),
+                    '<ctrl>+y': make_switch(14),
                 }
-                
-                with keyboard.GlobalHotKeys(hotkeys) as h:
-                    h.join()
+
+                for i in range(1, 10):
+                    hotkeys[f'<ctrl>+{i}'] = make_switch(i)
+                    hotkeys[f'<alt>+{i}'] = make_expr(i)
+
+                if blocking:
+                    with keyboard.GlobalHotKeys(hotkeys) as h:
+                        h.join()
+                else:
+                    self.listener = keyboard.GlobalHotKeys(hotkeys)
+                    self.listener.start()
+
             except ImportError:
                 logger.error("pynput module not found. Please install it.")
+
+    def run(self):
+        logger.info("Starting application...")
+
+        self.print_help()
+        
+        if self.enable_hotkeys:
+            if self.enable_cmd:
+                self._start_hotkey_service(blocking=False)
+            elif not self.enable_cmd:
+                self._start_hotkey_service(blocking=True)
+                return
+        
+        if self.enable_cmd:
+            self.print_info()
+            
+            while self.running:
+                try:
+                    # Use input() for command loop
+                    cmd_input = input("> ")
+                    cmd_line = cmd_input.strip().split()
+                    if not cmd_line: continue
+                    
+                    cmd = cmd_line[0].lower()
+                    args = cmd_line[1:]
+                    
+                    if cmd in ['help', '?', 'h']:
+                        self.print_help()
+                    elif cmd in ['char', 'c']:
+                        self.handle_char_cmd(args)
+                    elif cmd in ['expr', 'e']:
+                        self.handle_expr_cmd(args)
+                    elif cmd in ['bg', 'b']:
+                        self.handle_bg_cmd(args)
+                    elif cmd in ['info', 'i']:
+                        self.print_info()
+                    elif cmd == 'clear':
+                        self.clear_images()
+                    elif cmd in ['exit', 'quit', 'q']:
+                        self.running = False
+                        logger.info("Exiting...")
+                        os._exit(0)
+                    else:
+                        print("Unknown command. Type 'help' for list.")
+                except (EOFError, KeyboardInterrupt):
+                    self.running = False
+                    print("\nExiting...")
+                    os._exit(0)
+                except Exception as e:
+                    logger.error(f"Error in command loop: {e}")
+
+    def _unused_start_hotkey_listener(self):
+        # Kept for reference or removal
+        pass
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
+    parser.add_argument('--key', dest='key', action='store_true', default=True, help='Enable hotkeys (default: True)')
+    parser.add_argument('--no-key', dest='key', action='store_false', help='Disable hotkeys')
+    parser.add_argument('--cmd', action='store_true', default=False, help='Enable command line interface (default: False)')
     args = parser.parse_args()
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
         logger.info("Debug mode enabled")
 
-    app = Application()
+    app = Application(enable_hotkeys=args.key, enable_cmd=args.cmd)
     app.run()
