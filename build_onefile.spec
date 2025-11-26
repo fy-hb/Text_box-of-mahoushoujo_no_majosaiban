@@ -1,27 +1,40 @@
 # -*- mode: python ; coding: utf-8 -*-
+import sys
+import os
 
 block_cipher = None
 
-a = Analysis(
-    ['src/main.py'],
-    pathex=[],
-    binaries=[],
-    datas=[
-        ('resources', 'resources'),
-    ],
-    hiddenimports=[
-        'PIL',
-        'pilmoji',
-        'pyperclip',
+# Common hidden imports
+hidden_imports = [
+    'PIL',
+    'pilmoji',
+    'pyperclip',
+]
+
+# Platform specific hidden imports
+if sys.platform == 'win32':
+    hidden_imports.extend([
         'keyboard',
-        'pynput',
-        'pynput.keyboard',
-        'pynput.mouse',
         'win32clipboard',
         'win32gui',
         'win32process',
         'psutil',
+    ])
+else:
+    hidden_imports.extend([
+        'pynput',
+        'pynput.keyboard',
+        'pynput.mouse',
+    ])
+
+a = Analysis(
+    ['src/main.py'],
+    pathex=[os.getcwd()],
+    binaries=[],
+    datas=[
+        ('resources', 'resources'),
     ],
+    hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

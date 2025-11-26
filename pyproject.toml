@@ -27,6 +27,7 @@ dependencies = [
     "pywin32>=306; sys_platform == 'win32'",
     "pynput>=1.7.6; sys_platform != 'win32'",
     "pyclip>=0.7.0; sys_platform != 'win32'",
+    "pyinstaller>=6.17.0",
 ]
 
 [project.optional-dependencies]

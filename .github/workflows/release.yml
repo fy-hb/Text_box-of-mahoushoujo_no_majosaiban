@@ -1,0 +1,104 @@
+name: Build & Release (tag)
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: [3.11]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install system deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip
+
+      - name: Install uv and dependencies
+        run: |
+          pip install uv
+          # Install project dependencies (including pyinstaller) into system python
+          uv pip install --system .
+        shell: bash
+
+      - name: Run PyInstaller
+        run: |
+          python -m PyInstaller ./build_onefile.spec
+        shell: bash
+
+      - name: Package build output
+        shell: bash
+        run: |
+          # Determine executable name based on OS
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            EXE_NAME="MagicCut.exe"
+          else
+            EXE_NAME="MagicCut"
+          fi
+          
+          # Verify output exists
+          if [ ! -f "dist/$EXE_NAME" ]; then
+            echo "Error: dist/$EXE_NAME not found"
+            ls -R dist
+            exit 1
+          fi
+
+          # Create zip archive
+          ARCHIVE_NAME="MagicCut-${{ matrix.os }}-${{ github.ref_name }}.zip"
+          
+          cd dist
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            powershell -Command "Compress-Archive -Path '$EXE_NAME' -DestinationPath '../$ARCHIVE_NAME'"
+          else
+            zip -r "../$ARCHIVE_NAME" "$EXE_NAME"
+          fi
+          cd ..
+          
+          echo "ARTIFACT_PATH=$ARCHIVE_NAME" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}
+          path: ${{ env.ARTIFACT_PATH }}
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release & Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+
