@@ -126,7 +126,7 @@ class Application:
 
     def print_help(self):
         if self.enable_cmd:
-            print("支持的命令:")
+            print("\n支持的命令:")
             print("  char / c [name|index]  切换角色。无参数则循环切换。")
             print("  expr / e [index]       切换表情。无参数则循环切换。'0' 或 'random' 表示随机。")
             print("  bg / b [index]         切换背景。无参数则循环切换。'0' 或 'random' 表示随机。")
@@ -179,7 +179,7 @@ class Application:
         print("======================\n")
 
     def print_char_list(self):
-        print("Available characters:")
+        print("\nAvailable characters:")
         for idx, name in enumerate(self.character_list, start=1):
             print(f"  {idx}. {''.join(i["text"] for i in TEXT_CONFIGS[name])}({name})")
 
@@ -445,24 +445,24 @@ class Application:
                 if self.enable_hotkeys:
                     # Register hotkeys
                     for i in range(1, 10):
-                        keyboard.add_hotkey(f'ctrl+{i}', lambda idx=i: self.switch_character(idx))
+                        keyboard.add_hotkey(f'ctrl+{i}', lambda idx=i: self._run_with_clear(self.switch_character, idx))
 
-                    keyboard.add_hotkey('ctrl+q', lambda: self.switch_character(10))
-                    keyboard.add_hotkey('ctrl+e', lambda: self.switch_character(11))
-                    keyboard.add_hotkey('ctrl+r', lambda: self.switch_character(12))
-                    keyboard.add_hotkey('ctrl+t', lambda: self.switch_character(13))
-                    keyboard.add_hotkey('ctrl+y', lambda: self.switch_character(14)) # 14th character
+                    keyboard.add_hotkey('ctrl+q', lambda: self._run_with_clear(self.switch_character, 10))
+                    keyboard.add_hotkey('ctrl+e', lambda: self._run_with_clear(self.switch_character, 11))
+                    keyboard.add_hotkey('ctrl+r', lambda: self._run_with_clear(self.switch_character, 12))
+                    keyboard.add_hotkey('ctrl+t', lambda: self._run_with_clear(self.switch_character, 13))
+                    keyboard.add_hotkey('ctrl+y', lambda: self._run_with_clear(self.switch_character, 14)) # 14th character
 
                     # keyboard.add_hotkey('ctrl+0', self.show_current_character)
-                    keyboard.add_hotkey('ctrl+0', self.print_info)
-                    keyboard.add_hotkey('ctrl+tab', self.clear_images)
+                    keyboard.add_hotkey('ctrl+0', lambda: self._run_with_clear(self.print_info))
+                    keyboard.add_hotkey('ctrl+tab', lambda: self._run_with_clear(self.clear_images))
 
                     for i in range(1, 10):
-                        keyboard.add_hotkey(f'alt+{i}', lambda idx=i: self.switch_expression(idx))
+                        keyboard.add_hotkey(f'alt+{i}', lambda idx=i: self._run_with_clear(self.switch_expression, idx))
 
-                    keyboard.add_hotkey('alt+l', self.print_char_list)
+                    keyboard.add_hotkey('alt+l', lambda: self._run_with_clear(self.print_char_list))
 
-                keyboard.add_hotkey('alt+enter', self.process_generation)
+                keyboard.add_hotkey('alt+enter', lambda: self._run_with_clear(self.process_generation))
 
                 def on_exit():
                     logger.info("Exiting...")
@@ -477,17 +477,17 @@ class Application:
                 from pynput import keyboard
 
                 def on_activate_gen():
-                    self.process_generation()
+                    self._run_with_clear(self.process_generation)
 
                 def on_exit():
                     logger.info("Exiting...")
                     os._exit(0)
 
                 def make_switch(idx):
-                    return lambda: self.switch_character(idx)
+                    return lambda: self._run_with_clear(self.switch_character, idx)
 
                 def make_expr(idx):
-                    return lambda: self.switch_expression(idx)
+                    return lambda: self._run_with_clear(self.switch_expression, idx)
 
                 hotkeys = {
                     '<alt>+<enter>': on_activate_gen,
@@ -497,9 +497,9 @@ class Application:
                 if self.enable_hotkeys:
                     hotkeys.update({
                         # '<ctrl>+0': self.show_current_character,
-                        '<ctrl>+0': self.print_info,
-                        '<alt>+l': self.print_char_list,
-                        '<ctrl>+<tab>': self.clear_images,
+                        '<ctrl>+0': lambda: self._run_with_clear(self.print_info),
+                        '<alt>+l': lambda: self._run_with_clear(self.print_char_list),
+                        '<ctrl>+<tab>': lambda: self._run_with_clear(self.clear_images),
                         '<ctrl>+q': make_switch(10),
                         '<ctrl>+e': make_switch(11),
                         '<ctrl>+r': make_switch(12),
@@ -567,6 +567,22 @@ class Application:
                     os._exit(0)
                 except Exception as e:
                     logger.error(f"Error in command loop: {e}")
+
+    def clear_input(self):
+        try:
+            if os.name == 'nt':
+                import msvcrt
+                while msvcrt.kbhit():
+                    msvcrt.getch()
+            else:
+                import termios
+                termios.tcflush(sys.stdin, termios.TCIFLUSH)
+        except Exception:
+            pass
+
+    def _run_with_clear(self, func, *args, **kwargs):
+        self.clear_input()
+        return func(*args, **kwargs)
 
     def _unused_start_hotkey_listener(self):
         # Kept for reference or removal
