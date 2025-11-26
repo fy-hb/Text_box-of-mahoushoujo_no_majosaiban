@@ -55,9 +55,9 @@ jobs:
         run: |
           # Determine executable name based on OS
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            EXE_NAME="MagicCut.exe"
+            EXE_NAME="mahosojo.exe"
           else
-            EXE_NAME="MagicCut"
+            EXE_NAME="mahosojo"
           fi
           
           # Verify output exists
@@ -68,7 +68,7 @@ jobs:
           fi
 
           # Create zip archive
-          ARCHIVE_NAME="MagicCut-${{ matrix.os }}-${{ github.ref_name }}.zip"
+          ARCHIVE_NAME="mahosojo-${{ matrix.os }}-${{ github.ref_name }}.zip"
           
           cd dist
           if [[ "${{ runner.os }}" == "Windows" ]]; then
