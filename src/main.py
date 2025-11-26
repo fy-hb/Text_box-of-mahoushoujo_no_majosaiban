@@ -23,10 +23,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class Application:
-    def __init__(self, enable_hotkeys=True, enable_cmd=False):
+    def __init__(self, enable_hotkeys=True, enable_cmd=False, use_alt=False):
         self.running = True
         self.enable_hotkeys = enable_hotkeys
         self.enable_cmd = enable_cmd
+        self.use_alt = use_alt
         self.current_character_index = 2 # Default to Sherri
         self.character_list = list(CHARACTERS.keys())
         self.next_expression: Optional[int] = None
@@ -136,7 +137,7 @@ class Application:
             print("  exit / quit / q        退出")
 
         print("\n快捷键说明:")
-        print("  Alt + Enter        生成图片")
+        print(f"  {'Alt + Enter' if self.use_alt else 'Enter      '}        生成图片")
         print("  Alt + Esc          退出程序")
 
         if self.enable_hotkeys:
@@ -324,18 +325,22 @@ class Application:
         return os.path.join(self.magic_cut_folder, f"{char_name} ({img_num}).jpg")
 
     def process_generation(self):
-        if time.time() - self.last_generation_end_time < 0.5:
-            logger.debug("Ignoring trigger due to cooldown.")
-            return
-
-        logger.info("Start generate...")
-        
         # Check whitelist
         if self.enable_whitelist:
             active_window = PlatformUtils.get_active_window_process_name()
             if active_window and active_window not in WINDOW_WHITELIST:
                 logger.info(f"当前窗口 {active_window} 不在白名单内")
+                PlatformUtils.simulate_enter()
                 return
+
+        if time.time() - self.last_generation_end_time < 0.5:
+            logger.debug("Ignoring trigger due to cooldown.")
+            return
+
+        logger.info("Start generate...")
+
+        # Sleep
+        time.sleep(OPERATION_TIMEOUT)
 
         # Simulate Cut
         PlatformUtils.simulate_cut()
@@ -463,13 +468,23 @@ class Application:
 
                     keyboard.add_hotkey('alt+l', lambda: self._run_with_clear(self.print_char_list))
 
-                keyboard.add_hotkey('alt+enter', lambda: self._run_with_clear(self.process_generation))
+                def on_activate_gen():
+                    if self.use_alt:
+                        time.sleep(4 * OPERATION_TIMEOUT)
+                    self._run_with_clear(self.process_generation)
+
+                keyboard.add_hotkey(f'{"alt+" if self.use_alt else ""}enter', lambda: on_activate_gen(),
+                                    suppress=not self.use_alt,
+                                    trigger_on_release=not self.use_alt)
 
                 def on_exit():
                     logger.info("Exiting...")
                     os._exit(0)
 
-                keyboard.add_hotkey('alt+esc', on_exit)
+                if not self.enable_cmd:
+                    keyboard.wait('alt+esc')
+                else:
+                    keyboard.add_hotkey('alt+esc', on_exit)
 
             except ImportError:
                 logger.error("Keyboard module not found. Please install it.")
@@ -491,7 +506,7 @@ class Application:
                     return lambda: self._run_with_clear(self.switch_expression, idx)
 
                 hotkeys = {
-                    '<alt>+<enter>': on_activate_gen,
+                    f'{"<alt>+" if self.use_alt else ""}<enter>': on_activate_gen,
                     '<alt>+<esc>': on_exit,
                 }
 
@@ -530,7 +545,7 @@ class Application:
         self.print_char_list()
         
         self._start_hotkey_service()
-        
+
         if self.enable_cmd:
             while self.running:
                 try:
@@ -591,15 +606,3 @@ class Application:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
-    parser.add_argument('--key', dest='key', action='store_true', default=True, help='Enable hotkeys (default: True)')
-    parser.add_argument('--no-key', dest='key', action='store_false', help='Disable hotkeys')
-    parser.add_argument('--cmd', action='store_true', default=False, help='Enable command line interface (default: False)')
-    args = parser.parse_args()
-
-    if args.debug:
-        logging.getLogger().setLevel(logging.DEBUG)
-        logger.info("Debug mode enabled")
-
-    app = Application(enable_hotkeys=args.key, enable_cmd=args.cmd)
-    app.run()
